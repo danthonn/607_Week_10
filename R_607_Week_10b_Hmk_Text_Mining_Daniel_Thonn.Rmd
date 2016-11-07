@@ -1,0 +1,268 @@
+---
+title: "R_Week_10_Hmk_607_Text_Mining_Daniel_Thonn"
+output: html_document
+course: R-607 CUNY MSDA program
+
+---
+
+** Assignment 607_Homework: R_Week_10a_Hmk_607_Text_Mining_Daniel_Thonn **
+
+Summary of Assignment
+This assignment involves mining text data from example ham and spam files
+
+This Assignment requires the following:
+
+1). R-Studio
+
+The following R-packages are used:
+1.stringr
+2.SnowballC
+3.RTextTools
+4.tm
+#4.tidyr
+#5.dplyr
+#6.ggplot2 
+#7.httr
+#8.tidyjason
+#9.data.table
+
+Steps to reproduce:
+1).Install files in ("C:/mydata") from https://spamassassin.apache.org/publiccorpus/
+2) Unzip the two files (unzip twice each)
+3).Run the R-Studio file: R_Week_10a_Hmk_607_Text_Mining_Daniel_Thonn.Rmd
+
+
+Setting up and Preparing the Environment
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load the libraries needed
+
+```{r, echo=TRUE}
+
+
+#install.packages("stringr")
+library(stringr)
+
+#install.packages("SnowballC")
+library(SnowballC)
+
+#install.packages("RTextTools")
+suppressWarnings(library(RTextTools))
+
+#install.packages("tm")
+library(tm)
+
+##
+
+#install.packages("tidyr")
+#library(tidyr)
+
+#install.packages("dplyr")
+#library(dplyr)
+
+#install.packages("ggplot2")
+#library(ggplot2)
+
+#install.packages("httr")
+#library(httr)
+
+#install.packages("tidyjson")
+#library(tidyjson)
+
+#install.packages("data.table")
+#library(data.table)
+
+
+```
+
+
+Obtain data from:
+https://spamassassin.apache.org/publiccorpus/
+
+
+
+```{r, echo=TRUE}
+
+# identify working diretory
+setwd("C:/mydata")
+easyham_path <- "easy_ham"
+spam_path <- "spam_2"
+
+# load Corpus for ham
+corpus_ham <- Corpus((DirSource(directory=easyham_path, pattern="\\d+")), 
+    readerControl = list(reader = readPlain))
+
+length(corpus_ham)
+# [1] 2500
+
+#head(corpus_ham)
+#check meta tags of corpus_ham
+meta(corpus_ham[[1]])
+
+
+# load Corpus for spam
+corpus_spam <- Corpus((DirSource(directory=spam_path, pattern="\\d+")), 
+    readerControl = list(reader = readPlain))
+
+length(corpus_spam)
+# [1] 1396
+
+#check meta tags of corpus_ham
+meta(corpus_spam[[1]])
+
+```
+
+ Add meta tags for ham and spam documents
+
+```{r, echo=TRUE}
+# add meta tags to identify easy_ham and spam
+
+meta(corpus_ham, tag="emailtype") <-  "ham"
+#check meta tags of corpus_ham
+head(meta(corpus_ham))
+
+
+meta(corpus_spam, tag="emailtype") <- "spam"
+#check meta tags of corpus_ham
+head(meta(corpus_spam))
+
+corpus_all <- c(corpus_ham, corpus_spam)
+
+length(corpus_all)
+# [1] 3896
+
+```
+
+ 
+Check the TermDocumentMatrix and Cleanup
+
+```{r, echo=TRUE}
+
+
+#tdm1 <- TermDocumentMatrix(corpus_all)
+#tdm1
+
+# remove numbers
+corpus_all2 <- tm_map(corpus_all, removeNumbers)
+
+#tdm2 <- TermDocumentMatrix(corpus_all2)
+#tdm2
+
+# remove stops words
+corpus_all3 = tm_map(corpus_all2, removeWords, words=stopwords("en"))
+
+#tdm3 <- TermDocumentMatrix(corpus_all3)
+#tdm3
+
+# stem the terms
+corpus_all4 = tm_map(corpus_all3, stemDocument)
+
+```
+
+ Convert to a Document Term Matrix
+
+```{r, echo=TRUE}
+
+# convert to a Document Term Matrix
+dtm1 <- DocumentTermMatrix(corpus_all4)
+dtm1
+
+# remove sparse terms
+dtm2 <- removeSparseTerms(dtm1, 1-(10/length(corpus_all4)))
+dtm2
+
+```
+
+Create sample, DocumentTermMatrix, and Container for testing and modeling
+
+```{r, echo=TRUE}
+
+sample1 <- sample(corpus_all4,1000)
+
+head(meta(sample1))
+length(sample1)
+
+dtm3 <- DocumentTermMatrix(sample1)
+dtm3
+
+type1 <- unlist(meta(sample1, "emailtype")[,1])
+type1
+
+container1 <- create_container(dtm3,  labels = type1, trainSize = 1:400, testSize = 401:length(type1), virgin = FALSE)
+
+
+```
+
+
+Create Training Models
+ 
+
+```{r, echo=TRUE}
+ 
+# training models
+svm_model_1 <- train_model(container1 , "SVM")
+boosting_model_1 <- train_model(container1 , "BOOSTING")
+glmnet_model_1 <- train_model(container1 , "GLMNET")
+maxent_model_1 <- train_model(container1 , "MAXENT")
+
+# classification
+svm_classified_1 <- classify_model(container1, svm_model_1)
+rf_classified_1 <- classify_model(container1, boosting_model_1)
+glmnet_classified_1 <- classify_model(container1, glmnet_model_1)
+maxent_classified_1 <- classify_model(container1, maxent_model_1)
+
+
+# create dataframes for analysis
+classification_DF <- data.frame(
+  label = type1[401:length(type1)],
+  svm = svm_classified_1[,1],
+  rf = rf_classified_1[,1],
+  glmnet = glmnet_classified_1[,1],
+  maxent = maxent_classified_1[,1],
+  stringsAsFactors = F)
+
+# preview results
+head(classification_DF)
+
+```
+
+Review Results
+
+```{r, echo=TRUE}
+
+##Support Vector Machine Results
+prop.table(table(classification_DF[,1] == classification_DF[,2]))
+
+#FALSE  TRUE 
+#0.005 0.995 
+
+##Random Forest Results
+prop.table(table(classification_DF[,1] == classification_DF[,3]))
+
+#      FALSE        TRUE 
+#0.001666667 0.998333333 
+
+
+##glmnet Results
+prop.table(table(classification_DF[,1] == classification_DF[,4]))
+
+#FALSE  TRUE 
+#0.005 0.995 
+
+##Max-Entropy Results
+prop.table(table(classification_DF[,1] == classification_DF[,5]))
+
+#FALSE  TRUE 
+#0.005 0.995
+
+```
+
+Conclusion:  
+
+Identifying spam was successful with higher than 95% for each model.  This was for the easy spam files.  Further work would result in apply the same techniquest to harder more difficult to identify spam files and iterate until best results are achieved.
+
+
+**END**
